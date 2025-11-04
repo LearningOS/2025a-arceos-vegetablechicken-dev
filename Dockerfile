@@ -1,5 +1,8 @@
 FROM ubuntu:latest
 
+RUN sed -i 's/archive.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list && \
+    sed -i 's/archive.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list.d/*
+
 RUN apt update && apt install -y \
     wget \
     xxd \
