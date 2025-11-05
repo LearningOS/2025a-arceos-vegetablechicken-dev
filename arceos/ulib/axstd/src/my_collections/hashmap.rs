@@ -1,3 +1,8 @@
+#[macro_use]
+#[cfg(feature = "axstd")]
+extern crate axstd as std;
+extern crate alloc;
+
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use alloc::string::String;
