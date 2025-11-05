@@ -4,8 +4,11 @@
 #[macro_use]
 #[cfg(feature = "axstd")]
 extern crate axstd as std;
+extern crate alloc;
 
+use alloc::format;
 use std::my_collections::HashMap;
+use std::println;
 
 #[cfg_attr(feature = "axstd", no_mangle)]
 fn main() {
@@ -25,6 +28,12 @@ fn test_hashmap() {
         if let Some(k) = k.strip_prefix("key_") {
             assert_eq!(k.parse::<u32>().unwrap(), *v);
         }
+    }
+    for value in 40_000..N {
+        let key = format!("key_{value}");
+        assert_eq!(m.remove(&key), Some(value));
+        let key = format!("key_{value}");
+        assert_eq!(m.get(&key), None);
     }
     println!("test_hashmap() OK!");
 }
