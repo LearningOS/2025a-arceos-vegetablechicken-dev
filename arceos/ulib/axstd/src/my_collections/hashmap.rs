@@ -197,18 +197,35 @@ where
     /// remove entry
     pub fn remove(&mut self, key: &K) -> Option<V> {
         let index = self.bucket_index(key);
-        let mut cur = &self.buckets[index];
-        while let Some(node) = cur {
-            if node.key == *key {
-                let ret_val = node.value.clone();
-                return Some(ret_val);
+        let bucket = &mut self.buckets[index];
+        let mut prev = bucket;
+
+        loop {
+            match prev {
+                // Not found key
+                None => return None,
+                // Found key, and key matches
+                Some(node) if &node.key == key => {
+                    // take the node, prev becomes None
+                    let removed_node = prev.take().unwrap();
+                    // set prev.next to removed_node.next
+                    *prev = removed_node.next;
+                    self.size -= 1;
+                    return Some(removed_node.value);
+                }
+
+                // Found index, but key doesn't match
+                // find the next node
+                Some(node) => {
+                    prev = &mut node.next;
+                }
             }
-            cur = &node.next;
         }
-        None
     }
     /// enlarge hashmap
-    fn resize(&mut self) {}
+    fn resize(&mut self) {
+        // TODO
+    }
     /// iterator for hashmap
     pub fn iter(&self) -> Iter<'_, K, V> {
         Iter {
