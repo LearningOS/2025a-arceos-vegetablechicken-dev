@@ -1,7 +1,8 @@
+// use std::io::Split;
 use alloc::collections::BTreeMap;
 use alloc::sync::{Arc, Weak};
 use alloc::{string::String, vec::Vec};
-
+use alloc::string::ToString;
 use axfs_vfs::{VfsDirEntry, VfsNodeAttr, VfsNodeOps, VfsNodeRef, VfsNodeType};
 use axfs_vfs::{VfsError, VfsResult};
 use spin::RwLock;
@@ -65,6 +66,17 @@ impl DirNode {
             }
         }
         children.remove(name);
+        Ok(())
+    }
+    /// Rename a node from old_name to new_name in this directory.
+    pub fn rename_node(&self, old: &str, new: &str) -> VfsResult {
+        let mut children = self.children.write();
+        let node = children.get_mut(old).ok_or(VfsError::NotFound)?.clone();
+        if children.contains_key(new) {
+            children.remove(new);
+        }
+        children.remove(old);
+        children.insert(new.into(), node);
         Ok(())
     }
 }
@@ -163,6 +175,39 @@ impl VfsNodeOps for DirNode {
         } else {
             self.remove_node(name)
         }
+    }
+
+    fn rename(&self, old_path: &str, new_path: &str) -> VfsResult {
+        if old_path == new_path {
+            return Ok(());
+        }
+        // println!("Renaming from {:?} to {:?}", old_path, new_path);
+        let validate_path = |path: &str| -> VfsResult {
+            if path == "."
+                || path == ".."
+                || path.is_empty()
+                || path == "/" {
+                Err(VfsError::InvalidInput)
+            } else {
+                Ok(())
+            }
+        };
+        validate_path(old_path)?;
+        validate_path(new_path)?;
+        let (old_name, old_rest) = split_path(old_path);
+        if let Some(rest) = old_rest {
+            match old_name {
+                "" | "." => {
+                    self.rename(rest, new_path)?
+                },
+                ".." => self.parent().ok_or(VfsError::NotFound)?.rename(rest, new_path)?,
+                _ => self.children.read().get(old_name)
+                    .ok_or(VfsError::NotFound)?.rename(rest, new_path)?,
+            }
+        };
+        let new_file_name = new_path.split('/').last().ok_or(VfsError::InvalidInput)?;
+        validate_path(new_file_name)?;
+        self.rename_node(old_name, new_file_name)
     }
 
     axfs_vfs::impl_vfs_dir_default! {}
