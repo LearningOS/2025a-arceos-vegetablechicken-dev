@@ -144,60 +144,52 @@ fn sys_mmap(
     fd: i32,
     _offset: isize,
 ) -> isize {
-    if length == 0 {
-        return -1;
-    }
-    // extract known bits in flags and prot
-    let flags = MmapFlags::from_bits_truncate(flags);
-    let prot = MmapProt::from_bits_truncate(prot);
-    let prot = MappingFlags::from(prot);
-    // trans addr to VirtAddr
-    let start_va = VirtAddr::from(addr as usize).align_down_4k();
-    let end_va = VirtAddr::from((addr as usize).wrapping_add(length)).align_up_4k();
-    let aligned_len = usize::from(end_va - start_va);
-    // get task addr space
-    let cur = current();
-    let mut user_aspace = cur.task_ext().aspace.lock();
-    let addr = if flags.contains(MmapFlags::MAP_FIXED) {
-        let Some(free_addr) = user_aspace.find_free_area(
-            start_va,
-            aligned_len,
-            VirtAddrRange::new(start_va, end_va),
-        ) else {
-            return -1;
-        };
-        free_addr
-    } else {
-      let Some(free_addr) = user_aspace.find_free_area(
-          start_va,
-          aligned_len,
-          VirtAddrRange::new(start_va, user_aspace.end()),
-      ) else {
-          return -1;
-      };
-        free_addr
-    };
-    let is_anonymous =  flags.contains(MmapFlags::MAP_SHARED)
-        && flags.contains(MmapFlags::MAP_ANONYMOUS)
-        && fd == -1 ;
-    let Ok(_) = user_aspace.map_alloc(
-        start_va,
-        aligned_len,
-        prot,
-        is_anonymous,
-    ) else {
-        return -1;
-    };
-    if !is_anonymous {
-        let mut buffer: Vec<u8> = vec![0; aligned_len];
-        let read_size = api::sys_read(fd, buffer.as_mut_ptr() as *mut c_void, length);
-        if read_size < 0 {
-            return -1;
+    syscall_body!(sys_mmap, {
+        if length == 0 {
+            return Err(LinuxError::EINVAL);
         }
-        user_aspace.write(addr, buffer.as_ref()).map(|_| 0).unwrap_or(-1)
-    } else {
-        0
-    }
+        // extract known bits in flags and prot
+        let flags = MmapFlags::from_bits_truncate(flags);
+        let prot = MmapProt::from_bits_truncate(prot);
+        let prot = MappingFlags::from(prot);
+        // trans addr to VirtAddr
+        let start_va = VirtAddr::from(addr as usize).align_down_4k();
+        let end_va = VirtAddr::from((addr as usize).wrapping_add(length)).align_up_4k();
+        let aligned_len = usize::from(end_va - start_va);
+        // get task addr space
+        let cur = current();
+        let mut user_aspace = cur.task_ext().aspace.lock();
+        let addr = if flags.contains(MmapFlags::MAP_FIXED) {
+            user_aspace.find_free_area(
+                start_va,
+                aligned_len,
+                VirtAddrRange::new(start_va, end_va),
+            ).ok_or(LinuxError::ENOMEM)?
+        } else {
+            let start_va = if start_va >= user_aspace.base() {start_va}
+                                    else {user_aspace.base()};
+            user_aspace.find_free_area(
+                start_va,
+                aligned_len,
+                VirtAddrRange::new(start_va, user_aspace.end()),
+            ).ok_or(LinuxError::ENOMEM)?
+        };
+        let is_anonymous = flags.contains(MmapFlags::MAP_SHARED)
+            && flags.contains(MmapFlags::MAP_ANONYMOUS)
+            && fd == -1;
+        user_aspace.map_alloc(start_va, aligned_len, prot, is_anonymous)?;
+        if !is_anonymous {
+            let mut buffer: Vec<u8> = vec![0; aligned_len];
+            let read_size = api::sys_read(fd, buffer.as_mut_ptr() as *mut c_void, length);
+            if read_size < 0 {
+                return Err(LinuxError::EIO);
+            }
+            user_aspace.write(addr, buffer.as_ref())?;
+            Ok(0)
+        } else {
+            Ok(0)
+        }
+    })
 }
 
 fn sys_openat(dfd: c_int, fname: *const c_char, flags: c_int, mode: api::ctypes::mode_t) -> isize {
