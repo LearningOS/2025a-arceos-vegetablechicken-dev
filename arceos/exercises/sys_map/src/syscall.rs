@@ -8,6 +8,7 @@ use axtask::current;
 use axtask::TaskExtRef;
 use axhal::paging::MappingFlags;
 use arceos_posix_api as api;
+use memory_addr::{MemoryAddr, VirtAddr, VirtAddrRange};
 
 const SYS_IOCTL: usize = 29;
 const SYS_OPENAT: usize = 56;
@@ -137,10 +138,51 @@ fn sys_mmap(
     length: usize,
     prot: i32,
     flags: i32,
-    fd: i32,
+    _fd: i32,
     _offset: isize,
 ) -> isize {
-    unimplemented!("no sys_mmap!");
+    if length == 0 {
+        return -1;
+    }
+    // extract known bits in flags and prot
+    let flags = MmapFlags::from_bits_truncate(flags);
+    let prot = MmapProt::from_bits_truncate(prot);
+    let prot = MappingFlags::from(prot);
+    // trans addr to VirtAddr
+    let start_va = VirtAddr::from(addr as usize).align_down_4k();
+    let end_va = VirtAddr::from((addr as usize).wrapping_add(length)).align_up_4k();
+    let aligned_len = usize::from(end_va - start_va);
+    // get task addr space
+    let cur = current();
+    let mut user_aspace = cur.task_ext().aspace.lock();
+    let addr = if flags.contains(MmapFlags::MAP_FIXED) {
+        let Some(free_addr) = user_aspace.find_free_area(
+            start_va,
+            aligned_len,
+            VirtAddrRange::new(start_va, end_va),
+        ) else {
+            return -1;
+        };
+        free_addr
+    } else {
+      let Some(free_addr) = user_aspace.find_free_area(
+          start_va,
+          aligned_len,
+          VirtAddrRange::new(start_va, user_aspace.end()),
+      ) else {
+          return -1;
+      };
+        free_addr
+    };
+    let Ok(_) = user_aspace.map_alloc(
+        addr,
+        aligned_len,
+        prot,
+        false
+    ) else {
+        return -1;
+    };
+    0
 }
 
 fn sys_openat(dfd: c_int, fname: *const c_char, flags: c_int, mode: api::ctypes::mode_t) -> isize {
