@@ -175,9 +175,11 @@ fn sys_mmap(
             ).ok_or(LinuxError::ENOMEM)?
         };
         let is_anonymous = flags.contains(MmapFlags::MAP_SHARED)
-            && flags.contains(MmapFlags::MAP_ANONYMOUS)
-            && fd == -1;
-        user_aspace.map_alloc(start_va, aligned_len, prot, is_anonymous)?;
+            && flags.contains(MmapFlags::MAP_ANONYMOUS);
+        if !is_anonymous && fd < 0 {
+            return Err(LinuxError::EINVAL);
+        }
+        user_aspace.map_alloc(start_va, aligned_len, prot, !is_anonymous)?;
         if !is_anonymous {
             let mut buffer: Vec<u8> = vec![0; aligned_len];
             let read_size = api::sys_read(fd, buffer.as_mut_ptr() as *mut c_void, length);
@@ -185,10 +187,8 @@ fn sys_mmap(
                 return Err(LinuxError::EIO);
             }
             user_aspace.write(addr, buffer.as_ref())?;
-            Ok(0)
-        } else {
-            Ok(0)
         }
+        Ok(0)
     })
 }
 
