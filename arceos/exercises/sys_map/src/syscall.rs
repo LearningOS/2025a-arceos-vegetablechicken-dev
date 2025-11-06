@@ -2,6 +2,8 @@
 
 use core::ffi::{c_void, c_char, c_int};
 use core::task::Poll::Pending;
+use alloc::vec;
+use alloc::vec::Vec;
 use axhal::arch::TrapFrame;
 use axhal::trap::{register_trap_handler, SYSCALL};
 use axerrno::LinuxError;
@@ -178,7 +180,7 @@ fn sys_mmap(
     let is_anonymous =  flags.contains(MmapFlags::MAP_SHARED)
         && flags.contains(MmapFlags::MAP_ANONYMOUS)
         && fd == -1 ;
-    let Some(_) = user_aspace.map_alloc(
+    let Ok(_) = user_aspace.map_alloc(
         start_va,
         aligned_len,
         prot,
