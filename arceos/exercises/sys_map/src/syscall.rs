@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use core::ffi::{c_void, c_char, c_int};
+use core::task::Poll::Pending;
 use axhal::arch::TrapFrame;
 use axhal::trap::{register_trap_handler, SYSCALL};
 use axerrno::LinuxError;
@@ -138,7 +139,7 @@ fn sys_mmap(
     length: usize,
     prot: i32,
     flags: i32,
-    _fd: i32,
+    fd: i32,
     _offset: isize,
 ) -> isize {
     if length == 0 {
@@ -174,15 +175,27 @@ fn sys_mmap(
       };
         free_addr
     };
-    let Ok(_) = user_aspace.map_alloc(
-        addr,
+    let is_anonymous =  flags.contains(MmapFlags::MAP_SHARED)
+        && flags.contains(MmapFlags::MAP_ANONYMOUS)
+        && fd == -1 ;
+    let Some(_) = user_aspace.map_alloc(
+        start_va,
         aligned_len,
         prot,
-        false
+        is_anonymous,
     ) else {
         return -1;
     };
-    0
+    if !is_anonymous {
+        let mut buffer: Vec<u8> = vec![0; aligned_len];
+        let read_size = api::sys_read(fd, buffer.as_mut_ptr() as *mut c_void, length);
+        if read_size < 0 {
+            return -1;
+        }
+        user_aspace.write(addr, buffer.as_ref()).map(|_| 0).unwrap_or(-1)
+    } else {
+        0
+    }
 }
 
 fn sys_openat(dfd: c_int, fname: *const c_char, flags: c_int, mode: api::ctypes::mode_t) -> isize {
