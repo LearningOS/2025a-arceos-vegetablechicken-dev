@@ -188,7 +188,7 @@ fn sys_mmap(
             }
             user_aspace.write(addr, buffer.as_ref())?;
         }
-        Ok(0)
+        Ok(usize::from(addr))
     })
 }
 
