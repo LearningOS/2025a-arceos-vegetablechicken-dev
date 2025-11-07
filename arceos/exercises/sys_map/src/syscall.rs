@@ -179,7 +179,7 @@ fn sys_mmap(
         if !is_anonymous && fd < 0 {
             return Err(LinuxError::EINVAL);
         }
-        user_aspace.map_alloc(start_va, aligned_len, prot, !is_anonymous)?;
+        user_aspace.map_alloc(addr, aligned_len, prot, !is_anonymous)?;
         if !is_anonymous {
             let mut buffer: Vec<u8> = vec![0; aligned_len];
             let read_size = api::sys_read(fd, buffer.as_mut_ptr() as *mut c_void, length);
