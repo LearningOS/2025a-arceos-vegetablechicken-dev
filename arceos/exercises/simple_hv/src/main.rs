@@ -93,16 +93,17 @@ fn vmexit_handler(ctx: &mut VmCpuRegisters) -> bool {
                         assert_eq!(a0, 0x6688);
                         assert_eq!(a1, 0x1234);
                         ax_println!("Shutdown vm normally!");
+                        ctx.guest_regs.sepc += 4;
                         return true;
                     },
                     _ => todo!(),
                 }
             } else {
-                panic!("bad sbi message! ");
+                ax_println!("bad sbi message! ");
             }
         },
         Trap::Exception(Exception::IllegalInstruction) => {
-            panic!("Bad instruction: {:#x} sepc: {:#x}",
+            ax_println!("Bad instruction: {:#x} sepc: {:#x}",
                 stval::read(),
                 ctx.guest_regs.sepc
             );
@@ -110,7 +111,7 @@ fn vmexit_handler(ctx: &mut VmCpuRegisters) -> bool {
             ctx.guest_regs.gprs.set_reg(A0, 0x6688);
         },
         Trap::Exception(Exception::LoadGuestPageFault) => {
-            panic!("LoadGuestPageFault: stval{:#x} sepc: {:#x}",
+            ax_println!("LoadGuestPageFault: stval{:#x} sepc: {:#x}",
                 stval::read(),
                 ctx.guest_regs.sepc
             );
@@ -118,7 +119,7 @@ fn vmexit_handler(ctx: &mut VmCpuRegisters) -> bool {
             ctx.guest_regs.gprs.set_reg(A1, 0x1234);
         },
         _ => {
-            panic!(
+            ax_println!(
                 "Unhandled trap: {:?}, sepc: {:#x}, stval: {:#x}",
                 scause.cause(),
                 ctx.guest_regs.sepc,
